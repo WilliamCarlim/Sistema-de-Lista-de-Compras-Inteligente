@@ -1,0 +1,52 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String         @id @default(uuid())
+  name         String
+  email        String         @unique
+  passwordHash String
+  createdAt    DateTime       @default(now())
+  lists        ShoppingList[]
+}
+
+model ShoppingList {
+  id          String         @id @default(uuid())
+  title       String
+  description String?
+  budget      Float?
+  status      String         @default("ACTIVE") // ACTIVE, ARCHIVED, COMPLETED
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       ListItem[]
+}
+
+model Category {
+  id       String     @id @default(uuid())
+  name     String     @unique // Hortifrúti, Carnes, Bebidas, Limpeza, etc.
+  color    String?    // Hex code para tag
+  items    ListItem[]
+}
+
+model ListItem {
+  id           String       @id @default(uuid())
+  name         String
+  quantity     Float        @default(1)
+  unit         String       @default("un") // un, kg, g, L, ml, pacote
+  price        Float?       // Preço unitário estimado ou real
+  bought       Boolean      @default(false)
+  notes        String?
+  createdAt    DateTime     @default(now())
+  listId       String
+  list         ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  categoryId   String?
+  category     Category?    @relation(fields: [categoryId], references: [id])
+}
