@@ -8,7 +8,7 @@
     "dev:server": "tsx watch src/server/index.ts",
     "dev:client": "vite src/client",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "build": "vite build src/client --outDir dist/client && tsc -p tsconfig.server.json && npx prisma db push && npx tsx prisma/seed.ts",
+    "build": "vite build src/client --outDir ../../dist/client --emptyOutDir && tsc -p tsconfig.server.json && npx prisma db push && npx tsx prisma/seed.ts",
     "start": "node dist/server/index.js"
   },
   "dependencies": {
