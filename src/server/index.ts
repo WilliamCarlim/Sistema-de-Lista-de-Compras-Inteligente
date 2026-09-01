@@ -39,6 +39,10 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Healthcheck leve para manter a aplicação acordada e monitoramento
+app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
+
 // Rotas de Autenticação e Usuário
 app.post('/api/auth/register', register);
 app.post('/api/auth/login', login);
@@ -80,6 +84,27 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(clientPath, 'index.html'));
 });
 
+// Auto-ping interno para evitar hibernação no Render Free
+function startSelfPing() {
+  const targetUrl =
+    process.env.RENDER_EXTERNAL_URL || 'https://supermarket-shopping-list.onrender.com';
+
+  if (process.env.NODE_ENV === 'production' || process.env.RENDER_EXTERNAL_URL) {
+    const PING_INTERVAL = 10 * 60 * 1000; // 10 minutos
+    console.log(`[Self-Ping] Agendado a cada 10 minutos para: ${targetUrl}/health`);
+    
+    setInterval(async () => {
+      try {
+        const res = await fetch(`${targetUrl}/health`);
+        console.log(`[Self-Ping] Ping automático enviado com status ${res.status}`);
+      } catch (err: any) {
+        console.error(`[Self-Ping] Erro ao enviar ping:`, err.message);
+      }
+    }, PING_INTERVAL);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
+  startSelfPing();
 });
