@@ -4,6 +4,20 @@ export interface Category {
   id: string;
   name: string;
   color?: string;
+  _count?: {
+    products: number;
+    items: number;
+  };
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  defaultPrice?: number | null;
+  defaultUnit: string;
+  categoryId?: string | null;
+  category?: Category | null;
+  createdAt: string;
 }
 
 export interface ListItem {
@@ -16,6 +30,8 @@ export interface ListItem {
   notes?: string | null;
   createdAt: string;
   listId: string;
+  productId?: string | null;
+  product?: Product | null;
   categoryId?: string | null;
   category?: Category | null;
 }
@@ -74,7 +90,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
-  // Auth
+  // Auth & Profile
   async login(email: string, password: string) {
     const data = await request<{ token: string; user: User }>('/auth/login', {
       method: 'POST',
@@ -97,11 +113,81 @@ export const api = {
     return request<User>('/auth/me');
   },
 
+  async updateProfile(data: { name?: string; email?: string; currentPassword?: string; newPassword?: string }) {
+    return request<User>('/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
   logout() {
     localStorage.removeItem('token');
   },
 
-  // Lists
+  // Categories CRUD
+  async getCategories() {
+    return request<Category[]>('/categories');
+  },
+
+  async createCategory(name: string, color?: string) {
+    return request<Category>('/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name, color }),
+    });
+  },
+
+  async updateCategory(id: string, name: string, color?: string) {
+    return request<Category>(`/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, color }),
+    });
+  },
+
+  async deleteCategory(id: string) {
+    return request<{ message: string }>(`/categories/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Products CRUD
+  async getProducts() {
+    return request<Product[]>('/products');
+  },
+
+  async createProduct(data: {
+    name: string;
+    defaultPrice?: number | null;
+    defaultUnit?: string;
+    categoryId?: string | null;
+  }) {
+    return request<Product>('/products', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateProduct(
+    id: string,
+    data: Partial<{
+      name: string;
+      defaultPrice: number | null;
+      defaultUnit: string;
+      categoryId: string | null;
+    }>
+  ) {
+    return request<Product>(`/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteProduct(id: string) {
+    return request<{ message: string }>(`/products/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Lists CRUD
   async getLists() {
     return request<ShoppingList[]>('/lists');
   },
@@ -140,7 +226,7 @@ export const api = {
     }>(`/lists/${id}/summary`);
   },
 
-  // Items
+  // Items CRUD
   async addItem(
     listId: string,
     itemData: {
@@ -149,6 +235,7 @@ export const api = {
       unit: string;
       price?: number | null;
       categoryId?: string | null;
+      productId?: string | null;
       notes?: string | null;
     }
   ) {
@@ -172,6 +259,7 @@ export const api = {
       unit: string;
       price: number | null;
       categoryId: string | null;
+      productId: string | null;
       notes: string | null;
       bought: boolean;
     }>
@@ -186,10 +274,5 @@ export const api = {
     return request<{ message: string }>(`/items/${itemId}`, {
       method: 'DELETE',
     });
-  },
-
-  // Categories
-  async getCategories() {
-    return request<Category[]>('/categories');
   },
 };

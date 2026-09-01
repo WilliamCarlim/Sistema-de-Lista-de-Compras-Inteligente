@@ -96,6 +96,7 @@ export async function getListDetails(req: AuthenticatedRequest, res: Response) {
         items: {
           include: {
             category: true,
+            product: true,
           },
           orderBy: { createdAt: 'desc' },
         },

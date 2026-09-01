@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../prisma.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
@@ -9,6 +9,7 @@ const itemCreateSchema = z.object({
   unit: z.string().default('un'),
   price: z.number().nonnegative('O preço não pode ser negativo').optional().nullable(),
   categoryId: z.string().optional().nullable(),
+  productId: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -18,6 +19,7 @@ const itemUpdateSchema = z.object({
   unit: z.string().optional(),
   price: z.number().nonnegative('O preço não pode ser negativo').optional().nullable(),
   categoryId: z.string().optional().nullable(),
+  productId: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   bought: z.boolean().optional(),
 });
@@ -44,10 +46,12 @@ export async function addItem(req: AuthenticatedRequest, res: Response) {
         price: body.price,
         notes: body.notes,
         listId,
-        categoryId: body.categoryId,
+        productId: body.productId || null,
+        categoryId: body.categoryId || null,
       },
       include: {
         category: true,
+        product: true,
       },
     });
 
@@ -84,6 +88,7 @@ export async function toggleItem(req: AuthenticatedRequest, res: Response) {
       },
       include: {
         category: true,
+        product: true,
       },
     });
 
@@ -113,9 +118,14 @@ export async function updateItem(req: AuthenticatedRequest, res: Response) {
 
     const updatedItem = await prisma.listItem.update({
       where: { id },
-      data: body,
+      data: {
+        ...body,
+        categoryId: body.categoryId !== undefined ? body.categoryId : item.categoryId,
+        productId: body.productId !== undefined ? body.productId : item.productId,
+      },
       include: {
         category: true,
+        product: true,
       },
     });
 
