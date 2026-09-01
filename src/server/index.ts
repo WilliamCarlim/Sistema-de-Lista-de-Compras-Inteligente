@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { prisma } from './prisma.js';
 
 import { login, register, me, updateProfile } from './controllers/authController.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -39,9 +40,24 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Healthcheck leve para manter a aplicação acordada e monitoramento
-app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
+// Healthcheck ativo: consulta o Supabase para resetar a inatividade de 7 dias
+app.get('/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return res.json({ status: 'ok', database: 'connected', time: new Date() });
+  } catch (err: any) {
+    return res.status(500).json({ status: 'error', database: err.message, time: new Date() });
+  }
+});
+
+app.get('/api/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return res.json({ status: 'ok', database: 'connected', time: new Date() });
+  } catch (err: any) {
+    return res.status(500).json({ status: 'error', database: err.message, time: new Date() });
+  }
+});
 
 // Rotas de Autenticação e Usuário
 app.post('/api/auth/register', register);
@@ -84,21 +100,22 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(clientPath, 'index.html'));
 });
 
-// Auto-ping interno para evitar hibernação no Render Free
+// Auto-ping interno: mantém a Render acordada e o Supabase com consultas ativas
 function startSelfPing() {
   const targetUrl =
     process.env.RENDER_EXTERNAL_URL || 'https://supermarket-shopping-list.onrender.com';
 
   if (process.env.NODE_ENV === 'production' || process.env.RENDER_EXTERNAL_URL) {
-    const PING_INTERVAL = 10 * 60 * 1000; // 10 minutos
-    console.log(`[Self-Ping] Agendado a cada 10 minutos para: ${targetUrl}/health`);
-    
+    const PING_INTERVAL = 10 * 60 * 1000; // a cada 10 minutos
+    console.log(`[Self-Ping] Ativado para ${targetUrl}/health (Render + Supabase Keep-Alive)`);
+
     setInterval(async () => {
       try {
         const res = await fetch(`${targetUrl}/health`);
-        console.log(`[Self-Ping] Ping automático enviado com status ${res.status}`);
+        const json = await res.json();
+        console.log(`[Self-Ping] Ping executado com sucesso:`, json);
       } catch (err: any) {
-        console.error(`[Self-Ping] Erro ao enviar ping:`, err.message);
+        console.error(`[Self-Ping] Erro no ping:`, err.message);
       }
     }, PING_INTERVAL);
   }
