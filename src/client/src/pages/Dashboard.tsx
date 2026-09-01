@@ -20,6 +20,8 @@ export function Dashboard({ user, onSelectList }: DashboardProps) {
   const [budget, setBudget] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [listFilter, setListFilter] = useState<'ACTIVE' | 'COMPLETED'>('ACTIVE');
+
   const fetchLists = async () => {
     try {
       setLoading(true);
@@ -69,6 +71,7 @@ export function Dashboard({ user, onSelectList }: DashboardProps) {
         });
       } else {
         await api.createList(title, description || null, parsedBudget);
+        setListFilter('ACTIVE');
       }
 
       setIsModalOpen(false);
@@ -94,10 +97,25 @@ export function Dashboard({ user, onSelectList }: DashboardProps) {
     }
   };
 
+  const handleToggleListStatusFromCard = async (list: ShoppingList, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newStatus = list.status === 'COMPLETED' ? 'ACTIVE' : 'COMPLETED';
+    try {
+      await api.updateList(list.id, { status: newStatus });
+      fetchLists();
+    } catch (err: any) {
+      alert(err.message || 'Erro ao alterar status da lista.');
+    }
+  };
+
   const formatCurrency = (value?: number | null) => {
     if (value === undefined || value === null) return 'R$ 0,00';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
+
+  const activeLists = lists.filter((l) => l.status !== 'COMPLETED');
+  const completedLists = lists.filter((l) => l.status === 'COMPLETED');
+  const displayedLists = listFilter === 'ACTIVE' ? activeLists : completedLists;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
@@ -121,6 +139,49 @@ export function Dashboard({ user, onSelectList }: DashboardProps) {
         </button>
       </div>
 
+      {/* Tabs Filter: Ativas vs Finalizadas */}
+      <div className="flex items-center gap-2 border-b border-gray-200 mb-6">
+        <button
+          onClick={() => setListFilter('ACTIVE')}
+          className={`flex items-center gap-2 pb-3 px-4 text-sm font-bold border-b-2 transition ${
+            listFilter === 'ACTIVE'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Ativas
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-semibold transition ${
+              listFilter === 'ACTIVE'
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            {activeLists.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setListFilter('COMPLETED')}
+          className={`flex items-center gap-2 pb-3 px-4 text-sm font-bold border-b-2 transition ${
+            listFilter === 'COMPLETED'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Finalizadas
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-semibold transition ${
+              listFilter === 'COMPLETED'
+                ? 'bg-blue-100 text-blue-800'
+                : 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            {completedLists.length}
+          </span>
+        </button>
+      </div>
+
       {/* Content */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16">
@@ -131,17 +192,30 @@ export function Dashboard({ user, onSelectList }: DashboardProps) {
         <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm text-center">
           {error}
         </div>
-      ) : lists.length === 0 ? (
+      ) : displayedLists.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center">
           <ShoppingBag className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-          <h4 className="font-bold text-gray-800">Nenhuma lista encontrada</h4>
+          <h4 className="font-bold text-gray-800">
+            {listFilter === 'ACTIVE' ? 'Nenhuma lista ativa no momento' : 'Nenhuma lista finalizada'}
+          </h4>
           <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
-            Você ainda não criou nenhuma lista. Clique no botão &quot;Nova Lista&quot; acima para começar!
+            {listFilter === 'ACTIVE'
+              ? 'Você não tem listas ativas. Crie uma nova lista para começar suas compras!'
+              : 'Quando você concluir suas compras em uma lista, ela aparecerá aqui no histórico de finalizadas.'}
           </p>
+          {listFilter === 'ACTIVE' && (
+            <button
+              onClick={openCreateModal}
+              className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700 hover:underline"
+            >
+              <Plus className="h-4 w-4" />
+              Criar primeira lista
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {lists.map((list) => {
+          {displayedLists.map((list) => {
             const total = list.totalItems || 0;
             const bought = list.boughtItems || 0;
             const progressPercentage = total > 0 ? Math.round((bought / total) * 100) : 0;
@@ -158,15 +232,18 @@ export function Dashboard({ user, onSelectList }: DashboardProps) {
                     <h3 className="font-bold text-gray-900 text-base leading-snug line-clamp-1">
                       {list.title}
                     </h3>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleListStatusFromCard(list, e)}
+                      title={list.status === 'COMPLETED' ? 'Clique para reabrir como Ativa' : 'Clique para marcar como Finalizada'}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 border transition ${
                         list.status === 'COMPLETED'
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'bg-emerald-50 text-emerald-700'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                       }`}
                     >
                       {list.status === 'COMPLETED' ? 'Concluída' : 'Ativa'}
-                    </span>
+                    </button>
                   </div>
 
                   <p className="text-xs text-gray-500 mt-1 line-clamp-2">
@@ -186,7 +263,9 @@ export function Dashboard({ user, onSelectList }: DashboardProps) {
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2">
                       <div
-                        className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          list.status === 'COMPLETED' ? 'bg-blue-500' : 'bg-emerald-500'
+                        }`}
                         style={{ width: `${progressPercentage}%` }}
                       ></div>
                     </div>

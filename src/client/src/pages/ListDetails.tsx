@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ChevronLeft, Plus, Trash2, Edit3, AlertTriangle, CheckCircle, ShoppingCart, Tag, Info, Package, X } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { ChevronLeft, Plus, Trash2, Edit3, AlertTriangle, CheckCircle, ShoppingCart, Tag, Info, Package, X, Printer, Check } from 'lucide-react';
 import { api, ListItem, Category, Product, ShoppingList } from '../services/api.ts';
 
 interface ListDetailsProps {
@@ -23,6 +23,8 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
   const [categoryId, setCategoryId] = useState('');
   const [notes, setNotes] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   // Edit Item State
   const [editingItem, setEditingItem] = useState<ListItem | null>(null);
@@ -55,7 +57,19 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
     loadData();
   }, [listId]);
 
-  // When user selects a registered product from dropdown, auto-fill fields
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // When user selects a registered product from dropdown or autocomplete, auto-fill fields
   const handleSelectProduct = (prodId: string) => {
     setSelectedProductId(prodId);
     if (!prodId) return;
@@ -68,6 +82,11 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
       setCategoryId(prod.categoryId || '');
     }
   };
+
+  // Filter products for autocomplete matching
+  const matchingProducts = name.trim()
+    ? products.filter((p) => p.name.toLowerCase().includes(name.toLowerCase().trim()))
+    : [];
 
   // Toggle item bought (Optimistic)
   const handleToggleBought = async (item: ListItem) => {
@@ -114,6 +133,10 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
         });
       }
 
+      if (newItem.product && !products.some((p) => p.id === newItem.product?.id)) {
+        setProducts((prev) => [...prev, newItem.product!].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+
       // Reset
       setSelectedProductId('');
       setName('');
@@ -122,6 +145,7 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
       setPrice('');
       setCategoryId('');
       setNotes('');
+      setShowSuggestions(false);
       setShowAddForm(false);
     } catch (err: any) {
       alert(err.message || 'Erro ao adicionar item.');
@@ -189,7 +213,12 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
 
     try {
       const updated = await api.updateList(list.id, { status: newStatus });
-      setList({ ...list, status: updated.status });
+      if (newStatus === 'COMPLETED') {
+        // Ao finalizar, volta para a tela inicial
+        onBack();
+      } else {
+        setList({ ...list, status: updated.status });
+      }
     } catch (err: any) {
       alert(err.message || 'Erro ao atualizar status da lista.');
     }
@@ -249,9 +278,30 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 pb-36">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 mb-6">
+    <div className="max-w-4xl mx-auto px-4 py-6 pb-36 print:p-0 print:pb-0">
+      {/* Printable Header (Apenas na Impressão/PDF) */}
+      <div className="hidden print:block mb-6 border-b-2 border-gray-800 pb-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-black text-gray-900 tracking-tight">{list.title}</h1>
+            {list.description && <p className="text-xs text-gray-600 mt-1">{list.description}</p>}
+            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+              <span>Status: <strong>{list.status === 'COMPLETED' ? 'Finalizada' : 'Ativa'}</strong></span>
+              <span>•</span>
+              <span>Total: <strong>{list.items.length} itens</strong> ({list.items.filter((i) => i.bought).length} comprados)</span>
+            </div>
+          </div>
+          <div className="text-right text-xs">
+            <p className="text-gray-500">Impresso em: <strong>{new Date().toLocaleDateString('pt-BR')}</strong></p>
+            {budget > 0 && <p className="text-gray-700 mt-0.5">Meta Orçamento: <strong>{formatCurrency(budget)}</strong></p>}
+            <p className="text-sm font-bold text-gray-900 mt-1">Total Estimado: {formatCurrency(totalEstimated)}</p>
+            <p className="text-xs font-semibold text-emerald-800">Total Comprado: {formatCurrency(totalBought)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Screen Header */}
+      <div className="flex items-center justify-between gap-4 mb-6 print:hidden">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -267,23 +317,35 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
           </div>
         </div>
 
-        <button
-          onClick={handleToggleListStatus}
-          className={`text-xs font-semibold px-3 py-1.5 rounded-xl border transition ${
-            list.status === 'COMPLETED'
-              ? 'bg-blue-50 text-blue-700 border-blue-200'
-              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          {list.status === 'COMPLETED' ? 'Finalizada' : 'Concluir'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition shadow-sm"
+            title="Imprimir ou Salvar como PDF"
+          >
+            <Printer className="h-4 w-4 text-gray-600" />
+            <span className="hidden sm:inline">Imprimir / PDF</span>
+          </button>
+
+          <button
+            onClick={handleToggleListStatus}
+            className={`text-xs font-semibold px-3 py-2 rounded-xl border transition shadow-sm ${
+              list.status === 'COMPLETED'
+                ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+            }`}
+          >
+            {list.status === 'COMPLETED' ? 'Reabrir Lista' : 'Concluir'}
+          </button>
+        </div>
       </div>
 
       {/* Button to show Add Item form */}
       {!showAddForm && (
         <button
           onClick={() => setShowAddForm(true)}
-          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-2xl shadow-sm text-sm transition mb-6"
+          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-2xl shadow-sm text-sm transition mb-6 print:hidden"
         >
           <Plus className="h-4 w-4" />
           Adicionar Item à Lista
@@ -294,13 +356,16 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
       {showAddForm && (
         <form
           onSubmit={handleAddItem}
-          className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4 mb-6 animate-in slide-in-from-top duration-150"
+          className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4 mb-6 animate-in slide-in-from-top duration-150 print:hidden"
         >
           <div className="flex items-center justify-between border-b border-gray-100 pb-2">
             <h3 className="font-bold text-gray-800 text-sm">Adicionar Item</h3>
             <button
               type="button"
-              onClick={() => setShowAddForm(false)}
+              onClick={() => {
+                setShowAddForm(false);
+                setShowSuggestions(false);
+              }}
               className="text-xs text-gray-400 hover:text-gray-600 font-semibold"
             >
               Fechar
@@ -316,7 +381,10 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
               </label>
               <select
                 value={selectedProductId}
-                onChange={(e) => handleSelectProduct(e.target.value)}
+                onChange={(e) => {
+                  handleSelectProduct(e.target.value);
+                  setShowSuggestions(false);
+                }}
                 className="w-full rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
               >
                 <option value="">-- Selecione ou digite manualmente abaixo --</option>
@@ -330,7 +398,8 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
           )}
 
           <div className="space-y-3">
-            <div>
+            {/* Input Nome do Item com Autocomplete */}
+            <div className="relative" ref={suggestionsRef}>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
                 Nome do Item *
               </label>
@@ -339,9 +408,78 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
                 required
                 placeholder="Ex: Arroz, Leite, Detergente..."
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onFocus={() => {
+                  if (name.trim().length > 0) setShowSuggestions(true);
+                }}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setShowSuggestions(true);
+                  if (selectedProductId) {
+                    const matchingProd = products.find((p) => p.id === selectedProductId);
+                    if (!matchingProd || matchingProd.name.toLowerCase() !== e.target.value.toLowerCase()) {
+                      setSelectedProductId('');
+                    }
+                  }
+                }}
                 className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
+
+              {/* Autocomplete Dropdown */}
+              {showSuggestions && matchingProducts.length > 0 && (
+                <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-emerald-300 rounded-xl shadow-xl max-h-52 overflow-y-auto divide-y divide-gray-100">
+                  <div className="px-3 py-1.5 bg-emerald-50/80 text-[10px] font-bold text-emerald-800 uppercase tracking-wider flex items-center justify-between sticky top-0 backdrop-blur-sm">
+                    <span className="flex items-center gap-1">
+                      <Package className="h-3 w-3 text-emerald-600" />
+                      Produtos Cadastrados Sugeridos ({matchingProducts.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSuggestions(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {matchingProducts.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        handleSelectProduct(p.id);
+                        setShowSuggestions(false);
+                      }}
+                      className="w-full text-left px-3 py-2.5 hover:bg-emerald-50/60 transition flex items-center justify-between group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-800 group-hover:text-emerald-700">
+                          {p.name}
+                        </span>
+                        {p.category && (
+                          <span
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: `${p.category.color || '#10b981'}20`,
+                              color: p.category.color || '#059669',
+                            }}
+                          >
+                            {p.category.name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-right text-xs text-gray-500 shrink-0">
+                        <span className="font-medium bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                          {p.defaultUnit}
+                        </span>
+                        {p.defaultPrice ? (
+                          <span className="ml-1.5 font-bold text-gray-800">
+                            {formatCurrency(p.defaultPrice)}
+                          </span>
+                        ) : null}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -446,7 +584,7 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
               <div key={catName} className="space-y-2">
                 <div className="flex items-center gap-2 px-1">
                   <span
-                    className="w-2.5 h-2.5 rounded-full"
+                    className="w-2.5 h-2.5 rounded-full print:border print:border-gray-500"
                     style={{ backgroundColor: tagColor }}
                   ></span>
                   <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -463,34 +601,36 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
                       <div
                         key={item.id}
                         onClick={() => handleToggleBought(item)}
-                        className={`flex items-center justify-between p-3.5 bg-white border rounded-2xl shadow-sm transition active:scale-[0.99] select-none cursor-pointer ${
+                        className={`flex items-center justify-between p-3.5 bg-white border rounded-2xl shadow-sm transition active:scale-[0.99] select-none cursor-pointer print:shadow-none print:rounded-lg print:p-2.5 print:my-1 ${
                           item.bought
-                            ? 'border-gray-200 bg-gray-50/60 opacity-75'
+                            ? 'border-gray-200 bg-gray-50/60 opacity-75 print:opacity-100'
                             : 'border-gray-200 hover:border-emerald-200'
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div
-                            className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition shrink-0 ${
+                            className={`h-5 w-5 rounded-md border flex items-center justify-center transition shrink-0 ${
                               item.bought
-                                ? 'bg-emerald-500 border-emerald-500 text-white'
-                                : 'border-gray-300 text-transparent'
+                                ? 'bg-emerald-500 border-emerald-500 text-white print:border-black print:bg-gray-200 print:text-black'
+                                : 'border-gray-300 text-transparent print:border-black'
                             }`}
                           >
-                            <span className="text-[10px] font-bold">✓</span>
+                            <span className="text-[10px] font-bold">
+                              {item.bought ? '✓' : ''}
+                            </span>
                           </div>
 
                           <div className="min-w-0">
                             <p
                               className={`text-sm font-bold text-gray-900 truncate leading-snug ${
-                                item.bought ? 'line-through text-gray-400' : ''
+                                item.bought ? 'line-through text-gray-400 print:text-gray-700' : ''
                               }`}
                             >
                               {item.name}
                             </p>
                             {item.notes && (
                               <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
-                                <Info className="h-3 w-3 shrink-0 text-gray-400" />
+                                <Info className="h-3 w-3 shrink-0 text-gray-400 print:hidden" />
                                 <span className="truncate">{item.notes}</span>
                               </p>
                             )}
@@ -499,17 +639,17 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
 
                         <div className="flex items-center gap-3 ml-3 shrink-0">
                           <div className="text-right">
-                            <span className="text-xs font-semibold text-gray-500">
+                            <span className="text-xs font-semibold text-gray-600">
                               {item.quantity} {item.unit}
                             </span>
-                            {item.price && (
+                            {item.price ? (
                               <div className="text-xs font-bold text-gray-900 mt-0.5">
                                 {formatCurrency(itemTotal)}
                               </div>
-                            )}
+                            ) : null}
                           </div>
 
-                          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-0.5 print:hidden" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={(e) => startEdit(item, e)}
                               className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-gray-100 rounded-lg transition"
@@ -536,9 +676,20 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
         </div>
       )}
 
+      {/* Printable Footer / Totais no fim da página impressa */}
+      <div className="hidden print:block mt-8 pt-4 border-t-2 border-gray-400 text-xs">
+        <div className="flex justify-between items-center">
+          <p className="text-gray-500">Lista gerada pelo Sistema Lista Inteligente</p>
+          <div className="text-right space-y-1">
+            <p>Total de Itens: <strong>{list.items.length}</strong> ({list.items.filter(i => i.bought).length} marcados)</p>
+            <p className="text-sm font-bold text-gray-900">Total Estimado: {formatCurrency(totalEstimated)}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Edit Item Modal */}
       {editingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden">
           <div className="w-full max-w-sm bg-white rounded-2xl p-5 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-gray-100 pb-2">
               <h3 className="font-bold text-gray-800 text-base">Editar Item</h3>
@@ -649,8 +800,8 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
         </div>
       )}
 
-      {/* Sticky Mobile Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-xl px-4 py-3.5">
+      {/* Sticky Mobile/Desktop Footer */}
+      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-xl px-4 py-3.5 print:hidden">
         <div className="mx-auto max-w-4xl">
           <div className="flex justify-between items-center text-[11px] font-bold text-gray-500 mb-1 px-1">
             <span>Progresso da Compra</span>

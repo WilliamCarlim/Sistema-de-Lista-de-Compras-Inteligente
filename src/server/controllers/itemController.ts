@@ -38,15 +38,50 @@ export async function addItem(req: AuthenticatedRequest, res: Response) {
       return res.status(404).json({ error: 'Lista de compras não encontrada.' });
     }
 
+    const trimmedName = body.name.trim();
+    let resolvedProductId = body.productId || null;
+
+    // Se não passou productId explicitamente, procura se existe produto com mesmo nome ou cadastra automaticamente
+    if (!resolvedProductId && trimmedName) {
+      const existingProduct = await prisma.product.findFirst({
+        where: {
+          userId,
+          name: {
+            equals: trimmedName,
+            mode: 'insensitive',
+          },
+        },
+      });
+
+      if (existingProduct) {
+        resolvedProductId = existingProduct.id;
+      } else {
+        try {
+          const newProduct = await prisma.product.create({
+            data: {
+              name: trimmedName,
+              defaultPrice: body.price !== undefined ? body.price : null,
+              defaultUnit: body.unit || 'un',
+              categoryId: body.categoryId || null,
+              userId,
+            },
+          });
+          resolvedProductId = newProduct.id;
+        } catch (productCreateErr) {
+          console.warn('Não foi possível cadastrar o produto automaticamente:', productCreateErr);
+        }
+      }
+    }
+
     const item = await prisma.listItem.create({
       data: {
-        name: body.name,
+        name: trimmedName,
         quantity: body.quantity,
         unit: body.unit,
         price: body.price,
         notes: body.notes,
         listId,
-        productId: body.productId || null,
+        productId: resolvedProductId,
         categoryId: body.categoryId || null,
       },
       include: {
