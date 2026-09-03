@@ -13,22 +13,42 @@ import {
   ArrowDownRight,
   Filter,
   RefreshCw,
+  ShoppingCart,
 } from 'lucide-react';
 import { api, ReportsData } from '../services/api.ts';
+
+const MONTH_OPTIONS = [
+  { value: '01', label: 'Janeiro' },
+  { value: '02', label: 'Fevereiro' },
+  { value: '03', label: 'Março' },
+  { value: '04', label: 'Abril' },
+  { value: '05', label: 'Maio' },
+  { value: '06', label: 'Junho' },
+  { value: '07', label: 'Julho' },
+  { value: '08', label: 'Agosto' },
+  { value: '09', label: 'Setembro' },
+  { value: '10', label: 'Outubro' },
+  { value: '11', label: 'Novembro' },
+  { value: '12', label: 'Dezembro' },
+];
 
 export function ReportsPage() {
   const [data, setData] = useState<ReportsData | null>(null);
   const [period, setPeriod] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [productTab, setProductTab] = useState<'spent' | 'quantity'>('spent');
 
-  const fetchReports = async (selectedPeriod: string) => {
+  const fetchReports = async (selectedPeriod: string, year?: number) => {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.getReports(selectedPeriod);
+      const res = await api.getReports(selectedPeriod, selectedPeriod !== 'all' ? year : undefined);
       setData(res);
+      if (res.availableYears && res.availableYears.length > 0 && !res.availableYears.includes(selectedYear)) {
+        setSelectedYear(res.availableYears[0]);
+      }
     } catch (err: any) {
       setError(err.message || 'Erro ao carregar dados de relatórios.');
     } finally {
@@ -37,17 +57,28 @@ export function ReportsPage() {
   };
 
   useEffect(() => {
-    fetchReports(period);
-  }, [period]);
+    fetchReports(period, selectedYear);
+  }, [period, selectedYear]);
 
   const formatCurrency = (val?: number | null) => {
     if (val === undefined || val === null) return 'R$ 0,00';
     return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
+  const formatQuantity = (qty?: number | null) => {
+    if (qty === undefined || qty === null) return '0';
+    return Number.isInteger(qty) ? qty.toString() : qty.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  };
+
   const maxMonthSpent = data?.byMonth && data.byMonth.length > 0
     ? Math.max(...data.byMonth.map((m) => m.totalSpent), 1)
     : 1;
+
+  const getPeriodLabel = () => {
+    if (period === 'all') return 'Todo o Histórico (Geral)';
+    const monthObj = MONTH_OPTIONS.find((m) => m.value === period);
+    return `${monthObj?.label || period} de ${selectedYear}`;
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 pb-24 print:p-0 print:pb-0">
@@ -57,12 +88,7 @@ export function ReportsPage() {
           <div>
             <h1 className="text-2xl font-black text-gray-900 tracking-tight">Relatório de Compras & Finanças</h1>
             <p className="text-xs text-gray-600 mt-1">
-              Período selecionado: {
-                period === '30d' ? 'Últimos 30 dias' :
-                period === '90d' ? 'Últimos 3 meses' :
-                period === '180d' ? 'Últimos 6 meses' :
-                period === 'year' ? 'Último ano' : 'Todo o Histórico'
-              }
+              Período selecionado: <strong>{getPeriodLabel()}</strong>
             </p>
           </div>
           <div className="text-right text-xs text-gray-600">
@@ -89,25 +115,49 @@ export function ReportsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Filter Dropdown */}
+          {/* Filtro por Mês ou Todo o Histórico */}
           <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm text-xs">
             <Filter className="h-3.5 w-3.5 text-gray-400" />
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
-              className="bg-transparent font-semibold text-gray-700 focus:outline-none cursor-pointer"
+              className="bg-transparent font-bold text-gray-800 focus:outline-none cursor-pointer"
             >
               <option value="all">Todo o Histórico</option>
-              <option value="30d">Últimos 30 dias</option>
-              <option value="90d">Últimos 3 meses</option>
-              <option value="180d">Últimos 6 meses</option>
-              <option value="year">Último Ano</option>
+              <optgroup label="Filtrar por Mês">
+                {MONTH_OPTIONS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
 
+          {/* Seletor de Ano (apenas quando um mês estiver selecionado) */}
+          {period !== 'all' && (
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 shadow-sm text-xs">
+              <Calendar className="h-3.5 w-3.5 text-gray-400" />
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+                className="bg-transparent font-bold text-gray-800 focus:outline-none cursor-pointer"
+              >
+                {(data?.availableYears && data.availableYears.length > 0
+                  ? data.availableYears
+                  : [new Date().getFullYear()]
+                ).map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             type="button"
-            onClick={() => fetchReports(period)}
+            onClick={() => fetchReports(period, selectedYear)}
             className="p-2 bg-white border border-gray-200 rounded-xl text-gray-500 hover:text-gray-800 shadow-sm hover:bg-gray-50 transition"
             title="Recarregar Dados"
           >
@@ -135,7 +185,7 @@ export function ReportsPage() {
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-2xl p-6 text-center max-w-md mx-auto my-12">
           <p className="font-semibold text-sm">{error}</p>
           <button
-            onClick={() => fetchReports(period)}
+            onClick={() => fetchReports(period, selectedYear)}
             className="mt-3 text-xs bg-red-600 text-white font-bold px-4 py-2 rounded-xl hover:bg-red-700 transition"
           >
             Tentar Novamente
@@ -144,15 +194,15 @@ export function ReportsPage() {
       ) : !data || data.summary.totalLists === 0 ? (
         <div className="bg-white border border-gray-200 rounded-2xl p-10 text-center max-w-md mx-auto my-12">
           <ShoppingBag className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-          <h3 className="font-bold text-gray-800 text-base">Nenhum dado encontrado no período</h3>
+          <h3 className="font-bold text-gray-800 text-base">Nenhum dado encontrado em {getPeriodLabel()}</h3>
           <p className="text-xs text-gray-500 mt-1">
-            Crie listas de compras e informe os itens adquiridos para que os relatórios sejam gerados automaticamente.
+            Crie listas de compras ou selecione outro mês/ano para visualizar as análises.
           </p>
         </div>
       ) : (
         <div className="space-y-6">
-          {/* KPI Cards Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+          {/* KPI Cards Grid: 5 Cards (Total Gasto, Gasto Médio, Itens Adicionados, Itens Comprados, Orçamento) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
             {/* Card 1: Total Gasto */}
             <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
@@ -185,24 +235,40 @@ export function ReportsPage() {
               </p>
             </div>
 
-            {/* Card 3: Total de Itens Comprados */}
+            {/* Card 3: Itens no Carrinho (Comprados ou Não) */}
             <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Itens no Carrinho</span>
                 <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
-                  <CheckCircle2 className="h-4 w-4" />
+                  <ShoppingCart className="h-4 w-4" />
                 </div>
               </div>
-              <p className="text-xl font-black text-gray-900 leading-none">
-                {data.summary.totalItemsBought}
+              <p className="text-xl font-black text-purple-700 leading-none">
+                {formatQuantity(data.summary.totalItemsInLists)}
               </p>
-              <p className="mt-2 text-[11px] text-gray-500 font-medium">
-                Produtos adquiridos
+              <p className="mt-2 text-[11px] text-gray-500 font-medium truncate" title={`${data.summary.totalProductsInLists} produtos adicionados (comprados ou não)`}>
+                {data.summary.totalProductsInLists} produtos (comprados ou não)
               </p>
             </div>
 
-            {/* Card 4: Meta / Orçamento */}
+            {/* Card 4: Itens Comprados Apenas */}
             <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Itens Comprados</span>
+                <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
+                  <CheckCircle2 className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-xl font-black text-emerald-700 leading-none">
+                {formatQuantity(data.summary.totalItemsBought)}
+              </p>
+              <p className="mt-2 text-[11px] text-gray-500 font-medium truncate" title={`${data.summary.totalProductsBought} produtos finalizados`}>
+                {data.summary.totalProductsBought} produtos finalizados
+              </p>
+            </div>
+
+            {/* Card 5: Meta / Orçamento */}
+            <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-sm relative overflow-hidden col-span-2 sm:col-span-1">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Orçamento x Gasto</span>
                 <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
@@ -230,7 +296,7 @@ export function ReportsPage() {
                 </>
               ) : (
                 <>
-                  <p className="text-base font-bold text-gray-700 leading-none">Sem meta global</p>
+                  <p className="text-base font-bold text-gray-700 leading-none">Sem meta</p>
                   <p className="mt-2 text-[11px] text-gray-400">Defina orçamentos nas listas</p>
                 </>
               )}
@@ -252,7 +318,7 @@ export function ReportsPage() {
               </div>
 
               {data.byCategory.length === 0 ? (
-                <p className="text-xs text-gray-400 py-6 text-center">Nenhum gasto categorizado no período.</p>
+                <p className="text-xs text-gray-400 py-6 text-center">Nenhum gasto categorizado em {getPeriodLabel()}.</p>
               ) : (
                 <div className="space-y-3.5">
                   {data.byCategory.map((cat) => (
@@ -413,7 +479,7 @@ export function ReportsPage() {
                             </span>
                           </td>
                           <td className="py-2.5 text-center font-medium text-gray-600">
-                            {prod.totalQuantity} {prod.unit}
+                            {formatQuantity(prod.totalQuantity)} {prod.unit}
                           </td>
                           <td className="py-2.5 text-right pr-2 font-extrabold text-emerald-700">
                             {formatCurrency(prod.totalSpent)}
@@ -456,7 +522,7 @@ export function ReportsPage() {
                             </span>
                           </td>
                           <td className="py-2.5 text-center font-extrabold text-gray-900">
-                            {prod.totalQuantity} {prod.unit}
+                            {formatQuantity(prod.totalQuantity)} {prod.unit}
                           </td>
                           <td className="py-2.5 text-right pr-2 font-bold text-gray-700">
                             {formatCurrency(prod.totalSpent)}

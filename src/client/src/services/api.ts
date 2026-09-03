@@ -66,7 +66,10 @@ export interface ReportsSummary {
   totalLists: number;
   completedLists: number;
   activeLists: number;
+  totalItemsInLists: number;
+  totalProductsInLists: number;
   totalItemsBought: number;
+  totalProductsBought: number;
   avgSpentPerList: number;
 }
 
@@ -113,6 +116,7 @@ export interface ListPerformanceReport {
 
 export interface ReportsData {
   period: string;
+  availableYears?: number[];
   summary: ReportsSummary;
   byCategory: CategoryReport[];
   byMonth: MonthReport[];
@@ -341,7 +345,9 @@ export const api = {
   },
 
   // Reports
-  async getReports(period: string = 'all') {
-    return request<ReportsData>(`/reports?period=${period}`);
+  async getReports(period: string = 'all', year?: number) {
+    const query = new URLSearchParams({ period });
+    if (year) query.append('year', year.toString());
+    return request<ReportsData>(`/reports?${query.toString()}`);
   },
 };

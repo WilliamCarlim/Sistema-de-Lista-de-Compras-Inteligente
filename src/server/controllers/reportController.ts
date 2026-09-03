@@ -6,27 +6,44 @@ export async function getReports(req: AuthenticatedRequest, res: Response) {
   try {
     const userId = req.userId!;
     const period = (req.query.period as string) || 'all';
+    const yearParam = req.query.year ? parseInt(req.query.year as string, 10) : undefined;
 
-    let dateFilter: Date | undefined;
-    const now = new Date();
+    // Buscar anos distintos com listas cadastradas pelo usuário
+    const allUserLists = await prisma.shoppingList.findMany({
+      where: { userId },
+      select: { createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    if (period === '30d') {
-      dateFilter = new Date();
-      dateFilter.setDate(now.getDate() - 30);
-    } else if (period === '90d') {
-      dateFilter = new Date();
-      dateFilter.setDate(now.getDate() - 90);
-    } else if (period === '180d') {
-      dateFilter = new Date();
-      dateFilter.setDate(now.getDate() - 180);
-    } else if (period === 'year') {
-      dateFilter = new Date();
-      dateFilter.setFullYear(now.getFullYear() - 1);
+    const yearsSet = new Set<number>();
+    allUserLists.forEach((l) => yearsSet.add(new Date(l.createdAt).getFullYear()));
+    if (yearsSet.size === 0) {
+      yearsSet.add(new Date().getFullYear());
     }
+    const availableYears = Array.from(yearsSet).sort((a, b) => b - a);
 
     const whereClause: any = { userId };
-    if (dateFilter) {
-      whereClause.createdAt = { gte: dateFilter };
+
+    if (period !== 'all') {
+      let targetYear = yearParam || new Date().getFullYear();
+      let targetMonth: number | undefined;
+
+      if (period.includes('-')) {
+        const [yStr, mStr] = period.split('-');
+        targetYear = parseInt(yStr, 10);
+        targetMonth = parseInt(mStr, 10);
+      } else {
+        const parsed = parseInt(period, 10);
+        if (!isNaN(parsed) && parsed >= 1 && parsed <= 12) {
+          targetMonth = parsed;
+        }
+      }
+
+      if (targetMonth !== undefined) {
+        const startDate = new Date(targetYear, targetMonth - 1, 1, 0, 0, 0, 0);
+        const endDate = new Date(targetYear, targetMonth, 1, 0, 0, 0, 0);
+        whereClause.createdAt = { gte: startDate, lt: endDate };
+      }
     }
 
     const lists = await prisma.shoppingList.findMany({
@@ -45,7 +62,10 @@ export async function getReports(req: AuthenticatedRequest, res: Response) {
     // Totais e KPIs
     let totalSpent = 0;
     let totalEstimated = 0;
-    let totalItemsBought = 0;
+    let totalItemsInLists = 0;     // soma da quantidade de todos os itens (comprados ou não)
+    let totalProductsInLists = 0;  // total de produtos cadastrados nas listas
+    let totalItemsBought = 0;      // soma da quantidade apenas dos comprados
+    let totalProductsBought = 0;   // total de produtos comprados
     let totalBudget = 0;
     let completedLists = 0;
     let activeLists = 0;
@@ -128,18 +148,24 @@ export async function getReports(req: AuthenticatedRequest, res: Response) {
       monthData.listCount += 1;
 
       for (const item of list.items) {
-        const itemEstimatedTotal = (item.quantity || 1) * (item.price || 0);
+        const itemQuantity = item.quantity || 1;
+        const itemEstimatedTotal = itemQuantity * (item.price || 0);
         listEstimated += itemEstimatedTotal;
         totalEstimated += itemEstimatedTotal;
 
+        // Contabiliza em todos os itens adicionados (comprados ou não)
+        totalItemsInLists += itemQuantity;
+        totalProductsInLists += 1;
+
         if (item.bought) {
-          const itemCost = (item.quantity || 1) * (item.price || 0);
+          const itemCost = itemQuantity * (item.price || 0);
           listSpent += itemCost;
           totalSpent += itemCost;
           listBoughtCount += 1;
-          totalItemsBought += 1;
+          totalItemsBought += itemQuantity;
+          totalProductsBought += 1;
           monthData.totalSpent += itemCost;
-          monthData.itemsCount += 1;
+          monthData.itemsCount += itemQuantity;
 
           // Categoria
           const catId = item.category?.id || 'uncategorized';
@@ -157,7 +183,7 @@ export async function getReports(req: AuthenticatedRequest, res: Response) {
           }
           const catEntry = categoryMap.get(catId)!;
           catEntry.totalSpent += itemCost;
-          catEntry.itemsCount += 1;
+          catEntry.itemsCount += itemQuantity;
 
           // Produto
           const prodKey = item.name.toLowerCase().trim();
@@ -174,7 +200,7 @@ export async function getReports(req: AuthenticatedRequest, res: Response) {
           }
           const prodEntry = productMap.get(prodKey)!;
           prodEntry.totalSpent += itemCost;
-          prodEntry.totalQuantity += item.quantity || 1;
+          prodEntry.totalQuantity += itemQuantity;
           prodEntry.purchaseCount += 1;
         }
       }
@@ -201,6 +227,7 @@ export async function getReports(req: AuthenticatedRequest, res: Response) {
     const byCategory = Array.from(categoryMap.values())
       .map((cat) => ({
         ...cat,
+        itemsCount: Number(cat.itemsCount.toFixed(2)),
         percentage: totalSpent > 0 ? Number(((cat.totalSpent / totalSpent) * 100).toFixed(1)) : 0,
       }))
       .sort((a, b) => b.totalSpent - a.totalSpent);
@@ -226,6 +253,7 @@ export async function getReports(req: AuthenticatedRequest, res: Response) {
 
     return res.json({
       period,
+      availableYears,
       summary: {
         totalSpent,
         totalEstimated,
@@ -234,7 +262,10 @@ export async function getReports(req: AuthenticatedRequest, res: Response) {
         totalLists,
         completedLists,
         activeLists,
-        totalItemsBought,
+        totalItemsInLists: Number(totalItemsInLists.toFixed(2)),
+        totalProductsInLists,
+        totalItemsBought: Number(totalItemsBought.toFixed(2)),
+        totalProductsBought,
         avgSpentPerList,
       },
       byCategory,
