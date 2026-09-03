@@ -28,6 +28,7 @@ import {
   updateProduct,
   deleteProduct,
 } from './controllers/productController.js';
+import { getReports } from './controllers/reportController.js';
 
 dotenv.config();
 
@@ -90,6 +91,9 @@ app.post('/api/lists/:id/items', authMiddleware, addItem);
 app.patch('/api/items/:id/toggle', authMiddleware, toggleItem);
 app.put('/api/items/:id', authMiddleware, updateItem);
 app.delete('/api/items/:id', authMiddleware, deleteItem);
+
+// Rota de Relatórios Analíticos
+app.get('/api/reports', authMiddleware, getReports);
 
 // Servir frontend compilado
 const clientPath = path.join(__dirname, '../client');

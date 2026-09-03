@@ -22,6 +22,7 @@ const itemUpdateSchema = z.object({
   productId: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   bought: z.boolean().optional(),
+  updateProductPrice: z.boolean().optional(),
 });
 
 export async function addItem(req: AuthenticatedRequest, res: Response) {
@@ -151,12 +152,66 @@ export async function updateItem(req: AuthenticatedRequest, res: Response) {
       return res.status(404).json({ error: 'Item não encontrado.' });
     }
 
+    const { updateProductPrice, ...itemFields } = body;
+
+    let resolvedProductId = itemFields.productId !== undefined ? itemFields.productId : item.productId;
+
+    // Se o preço foi informado e a flag updateProductPrice não for explicitamente falsa
+    if (itemFields.price !== undefined && itemFields.price !== null && updateProductPrice !== false) {
+      const targetName = (itemFields.name || item.name).trim();
+
+      if (resolvedProductId) {
+        try {
+          await prisma.product.update({
+            where: { id: resolvedProductId },
+            data: { defaultPrice: itemFields.price },
+          });
+        } catch (prodUpdateErr) {
+          console.warn('Erro ao atualizar preço do produto existente:', prodUpdateErr);
+        }
+      } else if (targetName) {
+        // Se não possui productId associado, procura produto por nome ou cria
+        try {
+          const existingProduct = await prisma.product.findFirst({
+            where: {
+              userId,
+              name: {
+                equals: targetName,
+                mode: 'insensitive',
+              },
+            },
+          });
+
+          if (existingProduct) {
+            await prisma.product.update({
+              where: { id: existingProduct.id },
+              data: { defaultPrice: itemFields.price },
+            });
+            resolvedProductId = existingProduct.id;
+          } else {
+            const newProduct = await prisma.product.create({
+              data: {
+                name: targetName,
+                defaultPrice: itemFields.price,
+                defaultUnit: itemFields.unit || item.unit || 'un',
+                categoryId: itemFields.categoryId !== undefined ? itemFields.categoryId : item.categoryId,
+                userId,
+              },
+            });
+            resolvedProductId = newProduct.id;
+          }
+        } catch (autoProdErr) {
+          console.warn('Não foi possível sincronizar o produto no catálogo:', autoProdErr);
+        }
+      }
+    }
+
     const updatedItem = await prisma.listItem.update({
       where: { id },
       data: {
-        ...body,
-        categoryId: body.categoryId !== undefined ? body.categoryId : item.categoryId,
-        productId: body.productId !== undefined ? body.productId : item.productId,
+        ...itemFields,
+        categoryId: itemFields.categoryId !== undefined ? itemFields.categoryId : item.categoryId,
+        productId: resolvedProductId,
       },
       include: {
         category: true,

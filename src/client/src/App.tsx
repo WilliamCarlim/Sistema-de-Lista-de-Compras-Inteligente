@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Package, Tag, User as UserIcon, LogOut } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ShoppingBag, Package, Tag, User as UserIcon, LogOut, BarChart3 } from 'lucide-react';
 import { api, User } from './services/api.ts';
 import { LoginRegister } from './pages/LoginRegister.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { ListDetails } from './pages/ListDetails.tsx';
 import { CategoriesPage } from './pages/CategoriesPage.tsx';
 import { ProductsPage } from './pages/ProductsPage.tsx';
+import { ReportsPage } from './pages/ReportsPage.tsx';
 import { ProfilePage } from './pages/ProfilePage.tsx';
 
-type Tab = 'lists' | 'products' | 'categories' | 'profile';
+type Tab = 'lists' | 'products' | 'categories' | 'reports' | 'profile';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -140,6 +141,21 @@ function App() {
 
               <button
                 onClick={() => {
+                  setActiveTab('reports');
+                  setCurrentListId(null);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition ${
+                  activeTab === 'reports'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                Relatórios
+              </button>
+
+              <button
+                onClick={() => {
                   setActiveTab('profile');
                   setCurrentListId(null);
                 }}
@@ -177,7 +193,7 @@ function App() {
                 setActiveTab('lists');
                 setCurrentListId(null);
               }}
-              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-3 rounded-lg ${
+              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-2 rounded-lg ${
                 activeTab === 'lists' ? 'text-emerald-700 bg-emerald-50' : 'text-gray-500'
               }`}
             >
@@ -190,7 +206,7 @@ function App() {
                 setActiveTab('products');
                 setCurrentListId(null);
               }}
-              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-3 rounded-lg ${
+              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-2 rounded-lg ${
                 activeTab === 'products' ? 'text-emerald-700 bg-emerald-50' : 'text-gray-500'
               }`}
             >
@@ -203,7 +219,7 @@ function App() {
                 setActiveTab('categories');
                 setCurrentListId(null);
               }}
-              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-3 rounded-lg ${
+              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-2 rounded-lg ${
                 activeTab === 'categories' ? 'text-emerald-700 bg-emerald-50' : 'text-gray-500'
               }`}
             >
@@ -213,10 +229,23 @@ function App() {
 
             <button
               onClick={() => {
+                setActiveTab('reports');
+                setCurrentListId(null);
+              }}
+              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-2 rounded-lg ${
+                activeTab === 'reports' ? 'text-emerald-700 bg-emerald-50' : 'text-gray-500'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Relatórios
+            </button>
+
+            <button
+              onClick={() => {
                 setActiveTab('profile');
                 setCurrentListId(null);
               }}
-              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-3 rounded-lg ${
+              className={`flex flex-col items-center gap-0.5 text-xs font-semibold py-1 px-2 rounded-lg ${
                 activeTab === 'profile' ? 'text-emerald-700 bg-emerald-50' : 'text-gray-500'
               }`}
             >
@@ -240,6 +269,8 @@ function App() {
         {activeTab === 'products' && <ProductsPage />}
 
         {activeTab === 'categories' && <CategoriesPage />}
+
+        {activeTab === 'reports' && <ReportsPage />}
 
         {activeTab === 'profile' && (
           <ProfilePage

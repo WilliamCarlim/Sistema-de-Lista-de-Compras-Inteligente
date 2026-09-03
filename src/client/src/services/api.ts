@@ -58,11 +58,74 @@ export interface User {
   createdAt: string;
 }
 
+export interface ReportsSummary {
+  totalSpent: number;
+  totalEstimated: number;
+  totalBudget: number;
+  budgetSavings: number;
+  totalLists: number;
+  completedLists: number;
+  activeLists: number;
+  totalItemsBought: number;
+  avgSpentPerList: number;
+}
+
+export interface CategoryReport {
+  id: string;
+  name: string;
+  color: string;
+  totalSpent: number;
+  itemsCount: number;
+  percentage: number;
+}
+
+export interface MonthReport {
+  monthKey: string;
+  monthLabel: string;
+  totalSpent: number;
+  listCount: number;
+  itemsCount: number;
+}
+
+export interface TopProductReport {
+  name: string;
+  unit: string;
+  categoryName: string;
+  categoryColor: string;
+  totalSpent: number;
+  totalQuantity: number;
+  purchaseCount: number;
+}
+
+export interface ListPerformanceReport {
+  id: string;
+  title: string;
+  status: 'ACTIVE' | 'ARCHIVED' | 'COMPLETED';
+  createdAt: string;
+  budget?: number | null;
+  totalSpent: number;
+  totalEstimated: number;
+  totalItems: number;
+  boughtItems: number;
+  isOverBudget: boolean;
+  difference?: number | null;
+}
+
+export interface ReportsData {
+  period: string;
+  summary: ReportsSummary;
+  byCategory: CategoryReport[];
+  byMonth: MonthReport[];
+  topProductsBySpent: TopProductReport[];
+  topProductsByQuantity: TopProductReport[];
+  listPerformance: ListPerformanceReport[];
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('token');
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers || {}),
+    ...((options.headers as Record<string, string>) || {}),
   };
 
   if (token) {
@@ -262,6 +325,7 @@ export const api = {
       productId: string | null;
       notes: string | null;
       bought: boolean;
+      updateProductPrice: boolean;
     }>
   ) {
     return request<ListItem>(`/items/${itemId}`, {
@@ -274,5 +338,10 @@ export const api = {
     return request<{ message: string }>(`/items/${itemId}`, {
       method: 'DELETE',
     });
+  },
+
+  // Reports
+  async getReports(period: string = 'all') {
+    return request<ReportsData>(`/reports?period=${period}`);
   },
 };

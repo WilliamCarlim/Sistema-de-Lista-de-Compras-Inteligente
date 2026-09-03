@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Package, Edit2, Trash2, Search, X, Tag } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Package, Edit2, Trash2, Search, X } from 'lucide-react';
 import { api, Product, Category } from '../services/api.ts';
 
 const UNITS = [

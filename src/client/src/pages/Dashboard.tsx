@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit2, ShoppingBag, Percent, ArrowRight, DollarSign, Calendar, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Trash2, Edit2, ShoppingBag, Percent, ArrowRight, X } from 'lucide-react';
 import { api, ShoppingList, User } from '../services/api.ts';
 
 interface DashboardProps {
-  user: User;
+  user?: User;
   onSelectList: (id: string) => void;
 }
 
-export function Dashboard({ user, onSelectList }: DashboardProps) {
+export function Dashboard({ onSelectList }: DashboardProps) {
   const [lists, setLists] = useState<ShoppingList[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

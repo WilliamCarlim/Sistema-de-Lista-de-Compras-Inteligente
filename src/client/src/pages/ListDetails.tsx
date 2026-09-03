@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ChevronLeft, Plus, Trash2, Edit3, AlertTriangle, CheckCircle, ShoppingCart, Tag, Info, Package, X, Printer, Check } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Edit3, AlertTriangle, ShoppingCart, Info, Package, X, Printer, DollarSign } from 'lucide-react';
 import { api, ListItem, Category, Product, ShoppingList } from '../services/api.ts';
 
 interface ListDetailsProps {
@@ -34,6 +34,15 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
   const [editPrice, setEditPrice] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editUpdateProductPrice, setEditUpdateProductPrice] = useState(true);
+
+  // Quick Paid Price Modal State (Modo Compras / Preço Pago no Supermercado)
+  const [paidPriceItem, setPaidPriceItem] = useState<ListItem | null>(null);
+  const [paidUnitPrice, setPaidUnitPrice] = useState('');
+  const [paidTotalPrice, setPaidTotalPrice] = useState('');
+  const [paidUpdateProduct, setPaidUpdateProduct] = useState(true);
+  const [paidMarkBought, setPaidMarkBought] = useState(true);
+  const [savingPaidPrice, setSavingPaidPrice] = useState(false);
 
   const loadData = async () => {
     try {
@@ -170,6 +179,80 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
     }
   };
 
+  // Quick Paid Price Modal Handlers (Modo Compras)
+  const openPaidPriceModal = (item: ListItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPaidPriceItem(item);
+    const unitPriceVal = item.price !== null && item.price !== undefined ? item.price.toString() : '';
+    setPaidUnitPrice(unitPriceVal);
+    setPaidTotalPrice(
+      item.price ? (item.quantity * item.price).toFixed(2) : ''
+    );
+    setPaidUpdateProduct(true);
+    setPaidMarkBought(true);
+  };
+
+  const handleUnitPriceChange = (val: string) => {
+    setPaidUnitPrice(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && paidPriceItem) {
+      setPaidTotalPrice((num * paidPriceItem.quantity).toFixed(2));
+    } else {
+      setPaidTotalPrice('');
+    }
+  };
+
+  const handleTotalPriceChange = (val: string) => {
+    setPaidTotalPrice(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && paidPriceItem && paidPriceItem.quantity > 0) {
+      setPaidUnitPrice((num / paidPriceItem.quantity).toFixed(2));
+    } else {
+      setPaidUnitPrice('');
+    }
+  };
+
+  const handleSavePaidPrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paidPriceItem || !list) return;
+
+    try {
+      setSavingPaidPrice(true);
+      const parsedPrice = paidUnitPrice ? parseFloat(paidUnitPrice) : null;
+
+      const updated = await api.updateItem(paidPriceItem.id, {
+        price: parsedPrice,
+        bought: paidMarkBought,
+        updateProductPrice: paidUpdateProduct,
+      });
+
+      setList({
+        ...list,
+        items: list.items.map((i) => (i.id === paidPriceItem.id ? updated : i)),
+      });
+
+      if (paidUpdateProduct && parsedPrice !== null) {
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (
+              (paidPriceItem.productId && p.id === paidPriceItem.productId) ||
+              p.name.toLowerCase().trim() === paidPriceItem.name.toLowerCase().trim()
+            ) {
+              return { ...p, defaultPrice: parsedPrice };
+            }
+            return p;
+          })
+        );
+      }
+
+      setPaidPriceItem(null);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar o preço pago.');
+    } finally {
+      setSavingPaidPrice(false);
+    }
+  };
+
   // Edit Item Modal
   const startEdit = (item: ListItem, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -180,6 +263,7 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
     setEditPrice(item.price ? item.price.toString() : '');
     setEditCategoryId(item.categoryId || '');
     setEditNotes(item.notes || '');
+    setEditUpdateProductPrice(true);
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -187,19 +271,35 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
     if (!editingItem || !list) return;
 
     try {
+      const parsedPrice = editPrice ? parseFloat(editPrice) : null;
       const updated = await api.updateItem(editingItem.id, {
         name: editName,
         quantity: parseFloat(editQuantity) || 1,
         unit: editUnit,
-        price: editPrice ? parseFloat(editPrice) : null,
+        price: parsedPrice,
         categoryId: editCategoryId || null,
         notes: editNotes || null,
+        updateProductPrice: editUpdateProductPrice,
       });
 
       setList({
         ...list,
         items: list.items.map((i) => (i.id === editingItem.id ? updated : i)),
       });
+
+      if (editUpdateProductPrice && parsedPrice !== null) {
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (
+              (editingItem.productId && p.id === editingItem.productId) ||
+              p.name.toLowerCase().trim() === editName.toLowerCase().trim()
+            ) {
+              return { ...p, defaultPrice: parsedPrice };
+            }
+            return p;
+          })
+        );
+      }
 
       setEditingItem(null);
     } catch (err: any) {
@@ -236,6 +336,15 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
   const progressPercentage = list && list.items.length > 0
     ? Math.round((list.items.filter((i) => i.bought).length / list.items.length) * 100)
     : 0;
+
+  const totalProducts = list?.items.length || 0;
+  const totalUnits = list?.items.reduce((sum, i) => sum + (i.quantity || 1), 0) || 0;
+  const boughtProducts = list?.items.filter((i) => i.bought).length || 0;
+  const boughtUnits = list?.items.filter((i) => i.bought).reduce((sum, i) => sum + (i.quantity || 1), 0) || 0;
+
+  const formatQuantity = (qty: number) => {
+    return Number.isInteger(qty) ? qty.toString() : qty.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  };
 
   // Group items by category name
   const groupedItems: { [categoryName: string]: { category: Category | null; items: ListItem[] } } = {};
@@ -288,7 +397,7 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
             <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
               <span>Status: <strong>{list.status === 'COMPLETED' ? 'Finalizada' : 'Ativa'}</strong></span>
               <span>•</span>
-              <span>Total: <strong>{list.items.length} itens</strong> ({list.items.filter((i) => i.bought).length} comprados)</span>
+              <span>Total: <strong>{totalProducts} {totalProducts === 1 ? 'produto' : 'produtos'}</strong> ({formatQuantity(totalUnits)} {totalUnits === 1 ? 'item' : 'itens'} • {boughtProducts} comprados)</span>
             </div>
           </div>
           <div className="text-right text-xs">
@@ -312,7 +421,7 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
           <div>
             <h2 className="text-xl font-bold text-gray-900 leading-tight line-clamp-1">{list.title}</h2>
             <p className="text-xs text-gray-500 font-medium">
-              {list.items.length} itens {budget > 0 ? `| Meta: ${formatCurrency(budget)}` : ''}
+              {totalProducts} {totalProducts === 1 ? 'produto' : 'produtos'} • {formatQuantity(totalUnits)} {totalUnits === 1 ? 'item' : 'itens'} {budget > 0 ? `| Meta: ${formatCurrency(budget)}` : ''}
             </p>
           </div>
         </div>
@@ -637,29 +746,61 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 ml-3 shrink-0">
-                          <div className="text-right">
-                            <span className="text-xs font-semibold text-gray-600">
+                        <div className="flex items-center gap-2 ml-2 shrink-0">
+                          {/* Botão de Preço Pago / Exibição de Valores */}
+                          <div className="text-right print:block">
+                            <span className="text-xs font-semibold text-gray-500 block leading-tight">
                               {item.quantity} {item.unit}
                             </span>
                             {item.price ? (
-                              <div className="text-xs font-bold text-gray-900 mt-0.5">
-                                {formatCurrency(itemTotal)}
-                              </div>
-                            ) : null}
+                              <button
+                                type="button"
+                                onClick={(e) => openPaidPriceModal(item, e)}
+                                className="mt-0.5 text-right group flex flex-col items-end print:pointer-events-none"
+                                title="Clique para alterar o preço pago"
+                              >
+                                <span className="text-xs font-bold text-gray-900 group-hover:text-emerald-700 transition">
+                                  {formatCurrency(itemTotal)}
+                                </span>
+                                <span className="text-[10px] text-gray-400 group-hover:text-emerald-600 font-medium">
+                                  {formatCurrency(item.price)}/{item.unit}
+                                </span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => openPaidPriceModal(item, e)}
+                                className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg transition print:hidden"
+                                title="Informar o preço pago durante a compra"
+                              >
+                                <DollarSign className="h-3 w-3 text-emerald-600" />
+                                <span>Preço</span>
+                              </button>
+                            )}
                           </div>
 
+                          {/* Ações de Edição / Preço Pago / Excluir */}
                           <div className="flex items-center gap-0.5 print:hidden" onClick={(e) => e.stopPropagation()}>
                             <button
+                              type="button"
+                              onClick={(e) => openPaidPriceModal(item, e)}
+                              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                              title="Informar Preço Pago"
+                            >
+                              <DollarSign className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={(e) => startEdit(item, e)}
-                              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-gray-100 rounded-lg transition"
-                              title="Editar Item"
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              title="Editar Item Completo"
                             >
                               <Edit3 className="h-4 w-4" />
                             </button>
                             <button
+                              type="button"
                               onClick={(e) => handleDeleteItem(item.id, e)}
-                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-100 rounded-lg transition"
+                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
                               title="Excluir Item"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -681,7 +822,7 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
         <div className="flex justify-between items-center">
           <p className="text-gray-500">Lista gerada pelo Sistema Lista Inteligente</p>
           <div className="text-right space-y-1">
-            <p>Total de Itens: <strong>{list.items.length}</strong> ({list.items.filter(i => i.bought).length} marcados)</p>
+            <p>Total: <strong>{totalProducts} produtos ({formatQuantity(totalUnits)} itens)</strong> ({boughtProducts} produtos comprados)</p>
             <p className="text-sm font-bold text-gray-900">Total Estimado: {formatCurrency(totalEstimated)}</p>
           </div>
         </div>
@@ -780,6 +921,25 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
                 />
               </div>
 
+              {editPrice && (
+                <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none bg-emerald-50/60 border border-emerald-100 p-2.5 rounded-xl">
+                  <input
+                    type="checkbox"
+                    checked={editUpdateProductPrice}
+                    onChange={(e) => setEditUpdateProductPrice(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4 border-gray-300"
+                  />
+                  <div>
+                    <strong className="block text-gray-900 font-semibold leading-tight">
+                      Atualizar valor no cadastro do produto
+                    </strong>
+                    <span className="text-[10px] text-gray-500">
+                      O preço padrão deste produto será salvo para as próximas listas.
+                    </span>
+                  </div>
+                </label>
+              )}
+
               <div className="flex gap-2 justify-end text-sm pt-2 border-t border-gray-100">
                 <button
                   type="button"
@@ -800,11 +960,138 @@ export function ListDetails({ listId, onBack }: ListDetailsProps) {
         </div>
       )}
 
+      {/* Quick Paid Price Modal (Informar Preço Pago durante as Compras) */}
+      {paidPriceItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl space-y-4 border border-emerald-100">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-emerald-100 text-emerald-700 p-2 rounded-xl">
+                  <DollarSign className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-base leading-tight">Preço Pago na Compra</h3>
+                  <p className="text-xs text-gray-500 line-clamp-1">{paidPriceItem.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPaidPriceItem(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePaidPrice} className="space-y-4">
+              {/* Badge de quantidade e unidade */}
+              <div className="bg-gray-50 border border-gray-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                <span className="text-gray-500 font-medium">Quantidade na lista:</span>
+                <span className="font-bold text-gray-800 bg-white px-2.5 py-1 rounded-lg border border-gray-200">
+                  {paidPriceItem.quantity} {paidPriceItem.unit}
+                </span>
+              </div>
+
+              {/* Campos de Preço Unitário e Total Pago */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Preço Unitário (R$) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-2.5 text-xs text-gray-400 font-bold">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      autoFocus
+                      required
+                      placeholder="0,00"
+                      value={paidUnitPrice}
+                      onChange={(e) => handleUnitPriceChange(e.target.value)}
+                      className="w-full rounded-xl border border-gray-300 pl-8 pr-2 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-center"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Total Pago (R$)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-2.5 text-xs text-gray-400 font-bold">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0,00"
+                      value={paidTotalPrice}
+                      onChange={(e) => handleTotalPriceChange(e.target.value)}
+                      className="w-full rounded-xl border border-gray-300 pl-8 pr-2 py-2 text-sm font-bold text-emerald-700 bg-emerald-50/30 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-center"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Checkboxes de Integração */}
+              <div className="space-y-2.5 pt-1">
+                <label className="flex items-start gap-2.5 text-xs text-gray-700 cursor-pointer select-none bg-emerald-50/60 border border-emerald-100 p-2.5 rounded-xl">
+                  <input
+                    type="checkbox"
+                    checked={paidUpdateProduct}
+                    onChange={(e) => setPaidUpdateProduct(e.target.checked)}
+                    className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4 border-gray-300"
+                  />
+                  <div>
+                    <strong className="block text-gray-900 font-semibold leading-tight">
+                      Atualizar no cadastro do produto
+                    </strong>
+                    <span className="text-[11px] text-gray-500">
+                      O valor inserido será salvo como preço padrão do produto.
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none px-1">
+                  <input
+                    type="checkbox"
+                    checked={paidMarkBought}
+                    onChange={(e) => setPaidMarkBought(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4 border-gray-300"
+                  />
+                  <span className="font-medium text-gray-800">
+                    Marcar item como comprado no carrinho
+                  </span>
+                </label>
+              </div>
+
+              {/* Ações */}
+              <div className="flex gap-2 justify-end text-sm pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setPaidPriceItem(null)}
+                  className="px-4 py-2 border border-gray-300 rounded-xl text-gray-600 font-semibold hover:bg-gray-50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPaidPrice}
+                  className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                >
+                  {savingPaidPrice ? 'Salvando...' : 'Confirmar Preço'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Sticky Mobile/Desktop Footer */}
       <footer className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-xl px-4 py-3.5 print:hidden">
         <div className="mx-auto max-w-4xl">
           <div className="flex justify-between items-center text-[11px] font-bold text-gray-500 mb-1 px-1">
-            <span>Progresso da Compra</span>
+            <span>Progresso ({boughtProducts} de {totalProducts} produtos • {formatQuantity(boughtUnits)} itens)</span>
             <span>{progressPercentage}%</span>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-1.5 mb-3">
