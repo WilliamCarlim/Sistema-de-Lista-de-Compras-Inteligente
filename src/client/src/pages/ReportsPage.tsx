@@ -235,7 +235,7 @@ export function ReportsPage() {
               </p>
             </div>
 
-            {/* Card 3: Itens no Carrinho (Comprados ou Não) */}
+            {/* Card 3: Produtos no Carrinho (Comprados ou Não) */}
             <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Itens no Carrinho</span>
@@ -243,15 +243,20 @@ export function ReportsPage() {
                   <ShoppingCart className="h-4 w-4" />
                 </div>
               </div>
-              <p className="text-xl font-black text-purple-700 leading-none">
-                {formatQuantity(data.summary.totalItemsInLists)}
-              </p>
-              <p className="mt-2 text-[11px] text-gray-500 font-medium truncate" title={`${data.summary.totalProductsInLists} produtos adicionados (comprados ou não)`}>
-                {data.summary.totalProductsInLists} produtos (comprados ou não)
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-xl font-black text-purple-700 leading-none">
+                  {data.summary.totalProductsInLists}
+                </p>
+                <span className="text-xs font-bold text-purple-600">
+                  {data.summary.totalProductsInLists === 1 ? 'produto' : 'produtos'}
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] text-gray-500 font-medium truncate" title={`${formatQuantity(data.summary.totalItemsInLists)} itens no total (comprados ou não)`}>
+                {formatQuantity(data.summary.totalItemsInLists)} itens (comprados ou não)
               </p>
             </div>
 
-            {/* Card 4: Itens Comprados Apenas */}
+            {/* Card 4: Produtos Comprados Apenas */}
             <div className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-sm relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Itens Comprados</span>
@@ -259,11 +264,16 @@ export function ReportsPage() {
                   <CheckCircle2 className="h-4 w-4" />
                 </div>
               </div>
-              <p className="text-xl font-black text-emerald-700 leading-none">
-                {formatQuantity(data.summary.totalItemsBought)}
-              </p>
-              <p className="mt-2 text-[11px] text-gray-500 font-medium truncate" title={`${data.summary.totalProductsBought} produtos finalizados`}>
-                {data.summary.totalProductsBought} produtos finalizados
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-xl font-black text-emerald-700 leading-none">
+                  {data.summary.totalProductsBought}
+                </p>
+                <span className="text-xs font-bold text-emerald-600">
+                  {data.summary.totalProductsBought === 1 ? 'produto' : 'produtos'}
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] text-gray-500 font-medium truncate" title={`${formatQuantity(data.summary.totalItemsBought)} itens finalizados`}>
+                {formatQuantity(data.summary.totalItemsBought)} itens finalizados
               </p>
             </div>
 
